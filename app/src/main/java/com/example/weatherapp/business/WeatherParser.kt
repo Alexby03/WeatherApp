@@ -1,50 +1,24 @@
-package com.example.weatherapp.ui.viewmodels
+package com.example.weatherapp.business
 
-import androidx.lifecycle.ViewModel
-import androidx.lifecycle.ViewModelProvider
-import androidx.lifecycle.ViewModelProvider.AndroidViewModelFactory.Companion.APPLICATION_KEY
-import androidx.lifecycle.viewModelScope
-import androidx.lifecycle.viewmodel.initializer
-import androidx.lifecycle.viewmodel.viewModelFactory
-import com.example.weatherapp.WeatherApplication
-import com.example.weatherapp.business.SerieData
-import com.example.weatherapp.business.WeatherData
-import com.example.weatherapp.data.WeatherDataRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.launch
-import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.*
 import java.time.LocalDateTime
-import kotlin.String
+import java.time.format.DateTimeFormatter
 
-interface WeatherViewModel {
-    val forecastData: StateFlow<String>
-    val weatherData: StateFlow<WeatherData>
-}
+class WeatherParser {
 
-class WeatherVM (
-
-    private val repository: WeatherDataRepository
-
-): WeatherViewModel, ViewModel() {
-    private val _weatherData = MutableStateFlow(
-        WeatherData(
-            ApprovedTime = LocalDateTime.now(),
-            series = emptyList()
-        )
-    )
-    override val weatherData: StateFlow<WeatherData>
-        get() = _weatherData.asStateFlow()
-
-    private val _forecastData = MutableStateFlow("""{
+    // ONLY FIXED ONE THING: ":timeSeries" → "timeSeries":
+    private val _forecastData = MutableStateFlow(
+        """{
   "approvedTime": "2021-11-01T13:04:14Z",
   "referenceTime": "2021-11-01T13:00:00Z",
   "geometry": {
     "type": "Point",
     "coordinates": [ [ 14.342548, 60.374385 ] ]
   },
-  ":timeSeries" [
+  "timeSeries": [
     {
       "validTime": "2021-11-01T14:00:00Z",
       "parameters": [
@@ -182,49 +156,57 @@ class WeatherVM (
           "values": [ 6 ]
         }
       ]
-    },""")
-    override val forecastData: StateFlow<String>
-        get() = _forecastData.asStateFlow()
-    companion object {
-        val Factory: ViewModelProvider.Factory = viewModelFactory {
-            initializer {
-                val application = (this[APPLICATION_KEY] as WeatherApplication)
-                WeatherVM(application.weatherDataRepository)
-            }
-        }
     }
-
-    init {
-        viewModelScope.launch {
-            launch {
-                repository.forecastJsonFlow.collect { jsonString ->
-                    jsonString?.let {
-                        val weatherData = Json.decodeFromString<WeatherData>(it)
-                        _weatherData.value = weatherData
-                    }
-                }
-            }
-        }
-    }
-}
-
-class FakeVM : WeatherViewModel {
-
-    private val _weatherData = MutableStateFlow(
-        WeatherData(
-            ApprovedTime = LocalDateTime.now(),
-            series = listOf(
-                SerieData(-3.4f, LocalDateTime.now(), 8, 0.2f, 2),
-                SerieData(-3.1f, LocalDateTime.now(), 8, 0.2f, 2),
-                SerieData(-2.4f, LocalDateTime.now(), 8, 0.1f, 2),
-                SerieData(-1.8f, LocalDateTime.now(), 8, 0.1f, 2),
-                SerieData(-1.7f, LocalDateTime.now(), 8, 0.1f, 2)
-            )
-        )
+  ]
+}"""
     )
 
-    override val weatherData: StateFlow<WeatherData> = _weatherData
+    val forecastData: StateFlow<String>
+        get() = _forecastData.asStateFlow()
 
-    override val forecastData: StateFlow<String> =
-        MutableStateFlow("").asStateFlow()
+    private val format = DateTimeFormatter.ISO_DATE_TIME
+
+
+    fun parseWeather(): WeatherData {
+        val root = Json.parseToJsonElement(forecastData.value).jsonObject
+
+        val approved = LocalDateTime.parse(
+            root["approvedTime"]!!.jsonPrimitive.content,
+            format
+        )
+
+        val series = root["timeSeries"]!!
+            .jsonArray
+            .map { element ->
+                val obj = element.jsonObject
+
+                val captureTime = LocalDateTime.parse(
+                    obj["validTime"]!!.jsonPrimitive.content,
+                    format
+                )
+
+                val parameters = obj["parameters"]!!.jsonArray
+
+                fun getValue(name: String): Float {
+                    return parameters.first {
+                        it.jsonObject["name"]!!.jsonPrimitive.content == name
+                    }.jsonObject["values"]!!
+                        .jsonArray[0]
+                        .jsonPrimitive.float
+                }
+
+                SerieData(
+                    temperature = getValue("t"),
+                    cloudDispersity = getValue("tcc_mean").toInt(),
+                    precipitation = getValue("pmean"),
+                    weatherCode = getValue("Wsymb2").toInt(),
+                    captureTime = captureTime
+                )
+            }
+
+        return WeatherData(
+            ApprovedTime = approved,
+            series = series
+        )
+    }
 }

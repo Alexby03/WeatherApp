@@ -18,19 +18,13 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
-
             val weatherViewModel: WeatherVM = viewModel(factory = WeatherVM.Factory)
 
-
             WeatherAppTheme {
-                Scaffold(
+                WeatherScreen(
+                    vm = weatherViewModel,
                     modifier = Modifier.fillMaxSize()
-                ) { innerPadding ->
-                    WeatherScreen(
-                        vm = weatherViewModel,
-                        modifier = Modifier.padding(innerPadding),
-                    )
-                }
+                )
             }
         }
     }
