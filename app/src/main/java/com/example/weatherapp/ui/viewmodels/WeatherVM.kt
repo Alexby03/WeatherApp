@@ -7,8 +7,11 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.example.weatherapp.WeatherApplication
+import com.example.weatherapp.business.ApiModels
+import com.example.weatherapp.business.ConnectivityObserver
 import com.example.weatherapp.business.SerieData
 import com.example.weatherapp.business.WeatherData
+import com.example.weatherapp.business.toWeatherData
 import com.example.weatherapp.data.WeatherDataRepository
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -19,15 +22,29 @@ import java.time.LocalDateTime
 import kotlin.String
 
 interface WeatherViewModel {
-    val forecastData: StateFlow<String>
     val weatherData: StateFlow<WeatherData>
+    val latitudeInput: StateFlow<Double>
+    val longitudeInput: StateFlow<Double>
+    val isLoading: StateFlow<Boolean>
+    val errorMessage: StateFlow<String?>
+    val isOffline: StateFlow<Boolean>
+
+    fun saveCoordinates(lat: Double, lon: Double)
+    fun fetchWeather()
 }
 
 class WeatherVM (
 
-    private val repository: WeatherDataRepository
+    private val repository: WeatherDataRepository,
+    private val connectivityObserver: ConnectivityObserver
 
 ): WeatherViewModel, ViewModel() {
+
+    private val json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+    }
+
     private val _weatherData = MutableStateFlow(
         WeatherData(
             ApprovedTime = LocalDateTime.now(),
@@ -37,178 +54,102 @@ class WeatherVM (
     override val weatherData: StateFlow<WeatherData>
         get() = _weatherData.asStateFlow()
 
-    private val _forecastData = MutableStateFlow("""{
-  "approvedTime": "2021-11-01T13:04:14Z",
-  "referenceTime": "2021-11-01T13:00:00Z",
-  "geometry": {
-    "type": "Point",
-    "coordinates": [ [ 14.342548, 60.374385 ] ]
-  },
-  ":timeSeries" [
-    {
-      "validTime": "2021-11-01T14:00:00Z",
-      "parameters": [
-        {
-          "name": "spp",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "percent",
-          "values": [ 0.0 ]
-        },
-        {
-          "name": "pcat",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "category",
-          "values": [ 3 ]
-        },
-        {
-          "name": "pmin",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "kg/m2/h",
-          "values": [ 0.0 ]
-        },
-        {
-          "name": "pmean",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "kg/m2/h",
-          "values": [ 0.1 ]
-        },
-        {
-          "name": "pmax",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "kg/m2/h",
-          "values": [ 0.1 ]
-        },
-        {
-          "name": "pmedian",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "kg/m2/h",
-          "values": [ 0.1 ]
-        },
-        {
-          "name": "tcc_mean",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "octas",
-          "values": [ 8 ]
-        },
-        {
-          "name": "lcc_mean",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "octas",
-          "values": [ 8 ]
-        },
-        {
-          "name": "mcc_mean",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "octas",
-          "values": [ 6.0 ]
-        },
-        {
-          "name": "hcc_mean",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "octas",
-          "values": [ 8 ]
-        },
-        {
-          "name": "t",
-          "levelType": "hl",
-          "level": 2,
-          "unit": "Cel",
-          "values": [ 7.6 ]
-        },
-        {
-          "name": "msl",
-          "levelType": "hmsl",
-          "level": 0,
-          "unit": "hPa",
-          "values": [ 997.4 ]
-        },
-        {
-          "name": "vis",
-          "levelType": "hl",
-          "level": 2,
-          "unit": "km",
-          "values": [ 2.2 ]
-        },
-        {
-          "name": "wd",
-          "levelType": "hl",
-          "level": 10,
-          "unit": "degree",
-          "values": [ 148 ]
-        },
-        {
-          "name": "ws",
-          "levelType": "hl",
-          "level": 10,
-          "unit": "m/s",
-          "values": [ 2.5 ]
-        },
-        {
-          "name": "r",
-          "levelType": "hl",
-          "level": 2,
-          "unit": "percent",
-          "values": [ 100 ]
-        },
-        {
-          "name": "tstm",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "percent",
-          "values": [ 0.0 ]
-        },
-        {
-          "name": "gust",
-          "levelType": "hl",
-          "level": 10,
-          "unit": "m/s",
-          "values": [ 7.7 ]
-        },
-        {
-          "name": "Wsymb2",
-          "levelType": "hl",
-          "level": 0,
-          "unit": "category",
-          "values": [ 6 ]
+    private var _latitudeInput = MutableStateFlow(60.383)
+    override val latitudeInput: StateFlow<Double>
+        get() = _latitudeInput.asStateFlow()
+
+    private var _longitudeInput = MutableStateFlow(14.333)
+    override val longitudeInput: StateFlow<Double>
+        get() = _longitudeInput.asStateFlow()
+
+    //states
+    private val _isLoading = MutableStateFlow(false)
+    override val isLoading: StateFlow<Boolean>
+        get() = _isLoading.asStateFlow()
+
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    override val errorMessage: StateFlow<String?>
+        get() = _errorMessage.asStateFlow()
+
+    private val _isOffline = MutableStateFlow(false)
+    override val isOffline: StateFlow<Boolean>
+        get() = _isOffline.asStateFlow()
+
+    override fun saveCoordinates(lat: Double, lon: Double) {
+        _latitudeInput.value = lat
+        _longitudeInput.value = lon
+        viewModelScope.launch() {
+            repository.saveCoordinates(lat, lon)
+            fetchWeather()
         }
-      ]
-    },""")
-    override val forecastData: StateFlow<String>
-        get() = _forecastData.asStateFlow()
+    }
+
+    override fun fetchWeather() {
+        viewModelScope.launch {
+            connectivityObserver.observe().collect { status ->
+                val offline = status != ConnectivityObserver.Status.AVAILABLE
+                _isOffline.value = offline
+
+                if (!offline) {
+                    _isLoading.value = true
+                    _errorMessage.value = null
+                    val result = repository.fetchAndSaveForecastJson(_longitudeInput.value, _latitudeInput.value)
+                    result.onSuccess { json ->
+                    }.onFailure { error ->
+                        _errorMessage.value = "Failed to fetch: ${error.message}"
+                    }
+                    _isLoading.value = false
+                }
+            }
+        }
+    }
+
     companion object {
         val Factory: ViewModelProvider.Factory = viewModelFactory {
             initializer {
                 val application = (this[APPLICATION_KEY] as WeatherApplication)
-                WeatherVM(application.weatherDataRepository)
+                WeatherVM(application.weatherDataRepository, connectivityObserver = application.connectivityObserver)
             }
         }
     }
 
     init {
         viewModelScope.launch {
-            launch {
-                repository.forecastJsonFlow.collect { jsonString ->
-                    jsonString?.let {
-                        val weatherData = Json.decodeFromString<WeatherData>(it)
-                        _weatherData.value = weatherData
+            repository.coordinatesFlow.collect { (lat, lon) ->
+                _latitudeInput.value = lat
+                _longitudeInput.value = lon
+            }
+        }
+
+        viewModelScope.launch {
+            repository.forecastJsonFlow.collect { jsonString ->
+                if (jsonString != null) {
+                    try {
+                        val apiResponse = json.decodeFromString<ApiModels.ApiWeatherResponse>(jsonString)
+                        _weatherData.value = apiResponse.toWeatherData()
+                    } catch (e: Exception) {
+                        _errorMessage.value = "Parse error: ${e.message}"
                     }
+                }
+            }
+        }
+
+        viewModelScope.launch {
+            connectivityObserver.observe().collect { status ->
+                val offline = status != ConnectivityObserver.Status.AVAILABLE
+                _isOffline.value = offline
+
+                if (!offline) {
+                    fetchWeather()
                 }
             }
         }
     }
 }
 
-class FakeVM : WeatherViewModel {
+class FakeVM(
+
+) : WeatherViewModel {
 
     private val _weatherData = MutableStateFlow(
         WeatherData(
@@ -223,8 +164,19 @@ class FakeVM : WeatherViewModel {
         )
     )
 
-    override val weatherData: StateFlow<WeatherData> = _weatherData
+    override val latitudeInput: StateFlow<Double>
+        get() = MutableStateFlow(0.0)
+    override val longitudeInput: StateFlow<Double>
+        get() = MutableStateFlow(0.0)
+    override val isLoading: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
+    override val errorMessage: StateFlow<String?>
+        get() = MutableStateFlow(null)
+    override val isOffline: StateFlow<Boolean>
+        get() = MutableStateFlow(false)
 
-    override val forecastData: StateFlow<String> =
-        MutableStateFlow("").asStateFlow()
+    override val weatherData: StateFlow<WeatherData> = _weatherData
+    override fun saveCoordinates(lat: Double, lon: Double) { }
+    override fun fetchWeather() { }
+
 }

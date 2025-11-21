@@ -6,6 +6,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.preferencesDataStore
 import com.example.weatherapp.data.WeatherDataRepository
+import com.example.weatherapp.data.NetworkConnectivityObserver
 
 private const val APP_PREFERENCES_NAME = "weather_preferences"
 
@@ -17,11 +18,15 @@ class WeatherApplication : Application() {
 
     lateinit var weatherDataRepository: WeatherDataRepository
 
+    lateinit var connectivityObserver: NetworkConnectivityObserver
+
     override fun onCreate() {
         super.onCreate()
 
         weatherDataRepository = WeatherDataRepository(
             dataStore = this.dataStore
         )
+
+        connectivityObserver = NetworkConnectivityObserver(this)
     }
 }
