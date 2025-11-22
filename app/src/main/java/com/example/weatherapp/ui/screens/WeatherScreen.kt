@@ -110,7 +110,7 @@ fun WeatherScreen(
                 }
                 else -> {
                     val approvedText = if (isOffline) {
-                        "You are currently offline, last approved: ${weatherData.ApprovedTime.format(formatter)}"
+                        "Currently offline, last approved: ${weatherData.ApprovedTime.format(formatter)}"
                     } else {
                         "Approved: ${weatherData.ApprovedTime.format(formatter)}"
                     }
