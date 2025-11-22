@@ -110,7 +110,7 @@ fun WeatherScreen(
                 }
                 else -> {
                     val approvedText = if (isOffline) {
-                        "You are currently offline, last loaded: ${weatherData.ApprovedTime.format(formatter)}"
+                        "You are currently offline, last approved: ${weatherData.ApprovedTime.format(formatter)}"
                     } else {
                         "Approved: ${weatherData.ApprovedTime.format(formatter)}"
                     }
@@ -221,7 +221,6 @@ fun WeatherScreen(
         }
     }
 }
-
 
 @Preview(showBackground = true)
 @Composable

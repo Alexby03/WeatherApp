@@ -39,7 +39,7 @@ enum class WeatherType(val id: Int, val emoji: String) {
 
     companion object {
         fun fromId(id: Int): String {
-            return values().firstOrNull { it.id == id }?.emoji ?: "❓"
+            return WeatherType.entries.firstOrNull { it.id == id }?.emoji ?: "❓"
         }
     }
 }

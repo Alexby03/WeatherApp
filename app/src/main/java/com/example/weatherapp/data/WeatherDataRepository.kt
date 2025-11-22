@@ -9,6 +9,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.example.weatherapp.network.RetrofitInstance
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.map
 import java.io.IOException
 
@@ -21,7 +22,7 @@ class WeatherDataRepository (
         val LONGITUDE = doublePreferencesKey("longitude")
     }
 
-    suspend fun saveForecastJson(json: String) {
+    private suspend fun saveForecastJson(json: String) {
         dataStore.edit { prefs ->
             prefs[FORECAST_JSON_KEY] = json
         }
@@ -50,15 +51,16 @@ class WeatherDataRepository (
             if (exception is IOException) emit(emptyPreferences()) else throw exception
         }
         .map { prefs ->
-            val lat = prefs[LATITUDE] ?: 60.383
-            val lon = prefs[LONGITUDE] ?: 14.333
-            Pair(lat, lon)
+            val lat = prefs[LATITUDE]
+            val lon = prefs[LONGITUDE]
+            if (lat != null && lon != null) Pair(lat, lon) else null
         }
+        .filterNotNull()
 
     suspend fun saveCoordinates(latitude: Double, longitude: Double) {
-        dataStore.edit { preferences ->
-            preferences[LATITUDE] = latitude
-            preferences[LONGITUDE] = longitude
+        dataStore.edit { prefs ->
+            prefs[LATITUDE] = latitude
+            prefs[LONGITUDE] = longitude
         }
     }
 }

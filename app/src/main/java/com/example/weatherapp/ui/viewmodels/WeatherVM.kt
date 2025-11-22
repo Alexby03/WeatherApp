@@ -54,15 +54,14 @@ class WeatherVM (
     override val weatherData: StateFlow<WeatherData>
         get() = _weatherData.asStateFlow()
 
-    private var _latitudeInput = MutableStateFlow(60.383)
+    private var _latitudeInput = MutableStateFlow(0.0)
     override val latitudeInput: StateFlow<Double>
         get() = _latitudeInput.asStateFlow()
 
-    private var _longitudeInput = MutableStateFlow(14.333)
+    private var _longitudeInput = MutableStateFlow(0.0)
     override val longitudeInput: StateFlow<Double>
         get() = _longitudeInput.asStateFlow()
 
-    //states
     private val _isLoading = MutableStateFlow(false)
     override val isLoading: StateFlow<Boolean>
         get() = _isLoading.asStateFlow()
@@ -76,31 +75,24 @@ class WeatherVM (
         get() = _isOffline.asStateFlow()
 
     override fun saveCoordinates(lat: Double, lon: Double) {
-        _latitudeInput.value = lat
-        _longitudeInput.value = lon
-        viewModelScope.launch() {
+        viewModelScope.launch {
             repository.saveCoordinates(lat, lon)
-            fetchWeather()
+            _latitudeInput.value = lat
+            _longitudeInput.value = lon
+            if (!_isOffline.value) fetchWeather()
         }
     }
 
     override fun fetchWeather() {
         viewModelScope.launch {
-            connectivityObserver.observe().collect { status ->
-                val offline = status != ConnectivityObserver.Status.AVAILABLE
-                _isOffline.value = offline
-
-                if (!offline) {
-                    _isLoading.value = true
-                    _errorMessage.value = null
-                    val result = repository.fetchAndSaveForecastJson(_longitudeInput.value, _latitudeInput.value)
-                    result.onSuccess { json ->
-                    }.onFailure { error ->
-                        _errorMessage.value = "Failed to fetch: ${error.message}"
-                    }
-                    _isLoading.value = false
-                }
+            _isLoading.value = true
+            _errorMessage.value = null
+            val result = repository.fetchAndSaveForecastJson(_longitudeInput.value, _latitudeInput.value)
+            result.onSuccess { _ ->
+            }.onFailure { error ->
+                _errorMessage.value = "Failed to fetch: ${error.message}"
             }
+            _isLoading.value = false
         }
     }
 
@@ -138,8 +130,7 @@ class WeatherVM (
             connectivityObserver.observe().collect { status ->
                 val offline = status != ConnectivityObserver.Status.AVAILABLE
                 _isOffline.value = offline
-
-                if (!offline) {
+                if (!offline && _latitudeInput.value != 0.0 && _longitudeInput.value != 0.0) {
                     fetchWeather()
                 }
             }

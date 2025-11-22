@@ -1,1 +1,52 @@
-/build
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local configuration file (sdk path, etc)
+local.properties
+
+# IntelliJ / Android Studio
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# Kotlin
+*.kotlin_module
+
+# Log files
+*.log
+
+# Android specific
+captures/
+output.json
+
+# Google Services (e.g., Firebase)
+google-services.json
+
+# Proguard
+proguard/
+proguard-rules.pro
+
+# JetBrains
+*.jar
+*.class
+*.apk
+*.ap_
+*.dex
+*.class
+*.so
+*.swp
+*.lock
+*.bin
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Others
+*.tmp
+*.temp
